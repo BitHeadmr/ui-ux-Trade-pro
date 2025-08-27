@@ -173,143 +173,115 @@ const generateRandomData = (currentValue, points) => {
 
 const StockChart = ({ stock }) => {
   const [timeRange, setTimeRange] = useState("5M");
-  const [data, setData] = useState(generateRandomData(425371, 5));
+  const [data, setData] = useState(generateRandomData(425371, 60)); // Start with max points
   const [currentValue, setCurrentValue] = useState(425371);
   const [change, setChange] = useState({ value: 0, percentage: 0 });
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const newData = generateRandomData(
-        currentValue,
-        getDataPoints(timeRange)
-      );
-      setData((prevData) => [...prevData, ...newData.slice(1)]);
-      setCurrentValue(newData[newData.length - 1][3]);
-      console.log(newData);
-      const initialValue = data[1][2];
-      const changeValue = currentValue - initialValue;
-      const changePercentage = (changeValue / initialValue) * 100;
-      setChange({ value: changeValue, percentage: changePercentage });
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [timeRange, currentValue, data]);
-
   const getDataPoints = (range) => {
     switch (range) {
-      case "5M":
-        return 5;
-      case "10M":
-        return 10;
-      case "15M":
-        return 15;
-      case "30M":
-        return 30;
-      case "1H":
-        return 60;
-      default:
-        return 5;
+      case "5M": return 5;
+      case "10M": return 10;
+      case "15M": return 15;
+      case "30M": return 30;
+      case "1H": return 60;
+      default: return 5;
     }
   };
+
+  useEffect(() => {
+    const points = getDataPoints(timeRange);
+    const initialData = generateRandomData(425371, points);
+    setData(initialData);
+
+    const interval = setInterval(() => {
+      setData((prevData) => {
+        if (!prevData || prevData.length < 2) {
+          return prevData;
+        }
+
+        const lastClose = prevData[prevData.length - 1][3];
+        const newDataPoint = generateRandomData(lastClose, 1);
+        
+        // Create a new array, removing the oldest data point (at index 1)
+        // and adding the new one.
+        const updatedData = [...prevData.slice(2), newDataPoint[1]];
+
+        // Add the header back to the start of the array
+        updatedData.unshift(prevData[0]);
+
+        // Update calculations based on the new data window
+        const firstOpen = updatedData[1][2]; // first point in the new window
+        const latestClose = updatedData[updatedData.length - 1][3]; // last point
+
+        setCurrentValue(latestClose);
+        const newChangeValue = latestClose - firstOpen;
+        const newChangePercentage = (newChangeValue / firstOpen) * 100;
+        setChange({ value: newChangeValue, percentage: newChangePercentage });
+
+        return updatedData;
+      });
+    }, 2000); // Shortened interval for smoother visual updates
+
+    return () => clearInterval(interval);
+
+  }, [timeRange]);
 
   const options = useMemo(
     () => ({
       backgroundColor: "transparent",
       chartArea: { width: "90%", height: "80%" },
-      hAxis: {
-        textStyle: { color: "#9CA3AF" },
-        baselineColor: "#4B5563",
-        gridlines: { color: "transparent" },
-        format: "HH:mm",
-      },
-      vAxis: {
-        textStyle: { color: "#9CA3AF" },
-        baselineColor: "#4B5563",
-        gridlines: { color: "#4B5563" },
-      },
+      hAxis: { textStyle: { color: "#9CA3AF" }, baselineColor: "#4B5563", gridlines: { color: "transparent" }, format: "HH:mm" },
+      vAxis: { textStyle: { color: "#9CA3AF" }, baselineColor: "#4B5563", gridlines: { color: "#4B5563" } },
       legend: { position: "none" },
-      candlestick: {
-        fallingColor: { strokeWidth: 0, fill: "#EF4444" },
-        risingColor: { strokeWidth: 0, fill: "#10B981" },
-      },
-      animation: {
-        startup: true,
-        duration: 1000,
-        easing: "out",
-      },
+      candlestick: { fallingColor: { strokeWidth: 0, fill: "#EF4444" }, risingColor: { strokeWidth: 0, fill: "#10B981" } },
+      // Disable animation for smoother live updates
+      animation: { duration: 0 },
     }),
     []
   );
 
+  // Memoize the visible data to prevent unnecessary re-renders
+  const visibleData = useMemo(() => {
+    const points = getDataPoints(timeRange);
+    // Ensure the header is always included
+    return [data[0], ...data.slice(data.length - points)];
+  }, [data, timeRange]);
+
   return (
-    <motion.div
-      {...fadeInUp}
-      className="bg-gray-800 p-6 rounded-lg shadow-lg my-6"
-    >
+    <motion.div {...fadeInUp} className="bg-gray-800 p-6 rounded-lg shadow-lg my-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
         <div>
           <h2 className="text-2xl font-bold text-white">{stock}</h2>
           <div className="flex items-center space-x-2">
-            <span className="text-3xl font-bold text-white">
-              {currentValue.toFixed(2)}
-            </span>
+            <span className="text-3xl font-bold text-white">{currentValue.toFixed(2)}</span>
             <motion.span
-              className={`flex items-center ${
-                change.value >= 0 ? "text-green-500" : "text-red-500"
-              }`}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              key={change.value}
+              className={`flex items-center ${change.value >= 0 ? "text-green-500" : "text-red-500"}`}
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key={change.value}
             >
-              {change.value >= 0 ? (
-                <ArrowUpRight size={20} className="mr-1" />
-              ) : (
-                <ArrowDownRight size={20} className="mr-1" />
-              )}
-              {change.value > 0 ? "+" : ""}
-              {change.value.toFixed(2)} ({change.percentage.toFixed(2)}%)
+              {change.value >= 0 ? <ArrowUpRight size={20} className="mr-1" /> : <ArrowDownRight size={20} className="mr-1" />}
+              {change.value > 0 ? "+" : ""}{change.value.toFixed(2)} ({change.percentage.toFixed(2)}%)
             </motion.span>
           </div>
         </div>
         <div className="flex space-x-2 mt-4 md:mt-0">
-          <motion.button
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors flex items-center"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <PlusCircle className="inline-block mr-2" size={16} />
-            Create Alert
+          <motion.button className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors flex items-center" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <PlusCircle className="inline-block mr-2" size={16} />Create Alert
           </motion.button>
-          <motion.button
-            className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-600 transition-colors flex items-center"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <Eye className="inline-block mr-2" size={16} />
-            Watchlist
+          <motion.button className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-600 transition-colors flex items-center" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Eye className="inline-block mr-2" size={16} />Watchlist
           </motion.button>
         </div>
       </div>
-      <Chart
-        chartType="CandlestickChart"
-        width="100%"
-        height="400px"
-        data={data}
-        options={options}
-      />
+      {/* Pass the consistently sized `visibleData` to the Chart component */}
+      <Chart chartType="CandlestickChart" width="100%" height="400px" data={visibleData} options={options} />
       <div className="flex justify-between mt-4 overflow-x-auto">
         {["5M", "10M", "15M", "30M", "1H"].map((range) => (
           <motion.button
             key={range}
-            className={`text-sm ${
-              timeRange === range ? "text-blue-500" : "text-gray-300"
-            } hover:text-blue-500 transition-colors flex items-center`}
-            onClick={() => setTimeRange(range)}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
+            className={`text-sm ${timeRange === range ? "text-blue-500" : "text-gray-300"} hover:text-blue-500 transition-colors flex items-center`}
+            onClick={() => setTimeRange(range)} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
           >
-            <Clock size={14} className="mr-1" />
-            {range}
+            <Clock size={14} className="mr-1" />{range}
           </motion.button>
         ))}
       </div>
